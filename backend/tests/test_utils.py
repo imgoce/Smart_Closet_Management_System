@@ -9,10 +9,11 @@ from utils import (
     get_weather_data
 )
 
-pytestmark = pytest.mark.asyncio  # 해당 파일의 모든 테스트에 asyncio 마커 적용
+# 전역 마커(pytestmark) 삭제: 경고 제거. 필요한 곳에만 @pytest.mark.asyncio 부착.
 
+@pytest.mark.asyncio
 class TestGetCoordsFromAddress:
-    """1. OpenStreetMap 주소 -> 위경도 변환 테스트"""
+    """1. OpenStreetMap 주소 -> 위경도 변환 테스트 (비동기 함수)"""
     
     @patch('utils.httpx.AsyncClient')
     async def test_success(self, mock_async_client):
@@ -67,7 +68,7 @@ class TestGetCoordsFromAddress:
 
 
 class TestConvertGrid:
-    """2. 기상청 격자 변환(수학 연산) 테스트"""
+    """2. 기상청 격자 변환(수학 연산) 테스트 (동기 함수)"""
     
     def test_normal_grid(self):
         nx, ny = convert_grid(37.5665, 126.9780)
@@ -84,7 +85,7 @@ class TestConvertGrid:
 
 
 class TestGetBaseTime:
-    """3. 기상청 발표 시간 산출 로직 테스트"""
+    """3. 기상청 발표 시간 산출 로직 테스트 (동기 함수)"""
 
     @patch('utils.datetime')
     def test_normal_time(self, mock_datetime):
@@ -112,89 +113,134 @@ class TestGetBaseTime:
 
 
 class TestGetWeatherData:
-    """4. 기상청 단기예보 통신 및 날씨 분기 테스트"""
+    """4. 기상청 단기예보 통신 및 날씨 분기 테스트 (동기 함수)"""
 
-    @patch('utils.get_coords_from_address', new_callable=AsyncMock)
-    async def test_invalid_address(self, mock_get_coords):
-        mock_get_coords.return_value = (None, None)
-        res = await get_weather_data("이상한주소")
+    @patch('utils.requests.get')
+    def test_invalid_address(self, mock_requests_get):
+        # 위경도 변환 첫 번째 요청에서 실패(빈 배열 반환)
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = []
+        mock_requests_get.return_value = mock_geo_resp
+
+        res = get_weather_data("이상한주소")
         assert res == {"temperature": 20.0, "condition": "sunny"}
 
-    @patch('utils.get_coords_from_address', new_callable=AsyncMock)
     @patch('utils.requests.get')
-    async def test_requests_exception(self, mock_requests_get, mock_get_coords):
-        mock_get_coords.return_value = (37.5, 126.9)
+    def test_requests_exception(self, mock_requests_get):
+        # 요청 중 서버 다운 등 Exception 발생
         mock_requests_get.side_effect = Exception("API Server Down")
         
-        res = await get_weather_data("서울")
+        res = get_weather_data("서울")
         assert res == {"temperature": 20.0, "condition": "sunny"}
 
-    @patch('utils.get_coords_from_address', new_callable=AsyncMock)
     @patch('utils.requests.get')
-    async def test_resultcode_not_00(self, mock_requests_get, mock_get_coords):
-        mock_get_coords.return_value = (37.5, 126.9)
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"response": {"header": {"resultCode": "99"}}}
-        mock_requests_get.return_value = mock_resp
+    def test_resultcode_not_00(self, mock_requests_get):
+        # side_effect 배열: 1번째 호출은 주소, 2번째 호출은 날씨 API
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = [{'lat': '37.5', 'lon': '126.9'}]
         
-        res = await get_weather_data("서울")
+        mock_weather_resp = MagicMock()
+        mock_weather_resp.json.return_value = {"response": {"header": {"resultCode": "99"}}}
+        
+        mock_requests_get.side_effect = [mock_geo_resp, mock_weather_resp]
+        
+        res = get_weather_data("서울")
         assert res == {"temperature": 20.0, "condition": "sunny"}
 
-    @patch('utils.get_coords_from_address', new_callable=AsyncMock)
     @patch('utils.requests.get')
-    async def test_weather_condition_rainy(self, mock_requests_get, mock_get_coords):
-        mock_get_coords.return_value = (37.5, 126.9)
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
+    def test_weather_condition_rainy(self, mock_requests_get):
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = [{'lat': '37.5', 'lon': '126.9'}]
+        
+        mock_weather_resp = MagicMock()
+        mock_weather_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
             {"category": "TMP", "fcstValue": "15.0"},
             {"category": "SKY", "fcstValue": "4"},
             {"category": "PTY", "fcstValue": "1"}
         ]}}}}
-        mock_requests_get.return_value = mock_resp
         
-        res = await get_weather_data("서울")
+        mock_requests_get.side_effect = [mock_geo_resp, mock_weather_resp]
+        
+        res = get_weather_data("서울")
         assert res == {"temperature": 15.0, "condition": "rainy"}
 
-    @patch('utils.get_coords_from_address', new_callable=AsyncMock)
     @patch('utils.requests.get')
-    async def test_weather_condition_snowy(self, mock_requests_get, mock_get_coords):
-        mock_get_coords.return_value = (37.5, 126.9)
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
+    def test_weather_condition_snowy(self, mock_requests_get):
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = [{'lat': '37.5', 'lon': '126.9'}]
+        
+        mock_weather_resp = MagicMock()
+        mock_weather_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
             {"category": "TMP", "fcstValue": "-2.0"},
             {"category": "SKY", "fcstValue": "4"},
             {"category": "PTY", "fcstValue": "3"}
         ]}}}}
-        mock_requests_get.return_value = mock_resp
         
-        res = await get_weather_data("서울")
+        mock_requests_get.side_effect = [mock_geo_resp, mock_weather_resp]
+        
+        res = get_weather_data("서울")
         assert res == {"temperature": -2.0, "condition": "snowy"}
 
-    @patch('utils.get_coords_from_address', new_callable=AsyncMock)
     @patch('utils.requests.get')
-    async def test_weather_condition_cloudy(self, mock_requests_get, mock_get_coords):
-        mock_get_coords.return_value = (37.5, 126.9)
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
+    def test_weather_condition_cloudy(self, mock_requests_get):
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = [{'lat': '37.5', 'lon': '126.9'}]
+        
+        mock_weather_resp = MagicMock()
+        mock_weather_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
             {"category": "TMP", "fcstValue": "22.0"},
             {"category": "SKY", "fcstValue": "4"},
             {"category": "PTY", "fcstValue": "0"}
         ]}}}}
-        mock_requests_get.return_value = mock_resp
         
-        res = await get_weather_data("서울")
+        mock_requests_get.side_effect = [mock_geo_resp, mock_weather_resp]
+        
+        res = get_weather_data("서울")
         assert res == {"temperature": 22.0, "condition": "cloudy"}
 
-    @patch('utils.get_coords_from_address', new_callable=AsyncMock)
     @patch('utils.requests.get')
-    async def test_weather_condition_missing_tmp(self, mock_requests_get, mock_get_coords):
-        mock_get_coords.return_value = (37.5, 126.9)
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
+    def test_weather_condition_missing_tmp(self, mock_requests_get):
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = [{'lat': '37.5', 'lon': '126.9'}]
+        
+        mock_weather_resp = MagicMock()
+        mock_weather_resp.json.return_value = {"response": {"header": {"resultCode": "00"}, "body": {"items": {"item": [
             {"category": "SKY", "fcstValue": "1"},
             {"category": "PTY", "fcstValue": "0"}
         ]}}}}
-        mock_requests_get.return_value = mock_resp
         
-        res = await get_weather_data("서울")
+        mock_requests_get.side_effect = [mock_geo_resp, mock_weather_resp]
+        
+        res = get_weather_data("서울")
+        assert res == {"temperature": 20.0, "condition": "sunny"}
+
+    @patch('utils.requests.get')
+    def test_weather_api_exception_second_call(self, mock_requests_get):
+        # 주소 변환은 정상 데이터 반환
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = [{'lat': '37.5', 'lon': '126.9'}]
+        
+        # 날씨 API에서 Exception 발생하도록 지정
+        mock_requests_get.side_effect = [mock_geo_resp, Exception("Weather API Timeout")]
+        
+        res = get_weather_data("서울")
+        
+        # 예외가 발생해도 시스템이 멈추지 않고 기본값을 반환하는지 검증
+        assert res == {"temperature": 20.0, "condition": "sunny"}
+
+    @patch('utils.requests.get')
+    def test_weather_data_parsing_keyerror(self, mock_requests_get):
+        # 주소 변환 정상
+        mock_geo_resp = MagicMock()
+        mock_geo_resp.json.return_value = [{'lat': '37.5', 'lon': '126.9'}]
+        
+        # 날씨 API 호출은 성공했으나, 정상 구조(response -> body -> items)가 없는 데이터 반환
+        mock_weather_resp = MagicMock()
+        mock_weather_resp.json.return_value = {"unexpected_data_structure": "error"}
+        
+        mock_requests_get.side_effect = [mock_geo_resp, mock_weather_resp]
+        
+        res = get_weather_data("서울")
+        
+        # JSON 키 에러가 발생하면 except Exception: 블록으로 빠져나와 기본값을 반환하는지 검증
         assert res == {"temperature": 20.0, "condition": "sunny"}

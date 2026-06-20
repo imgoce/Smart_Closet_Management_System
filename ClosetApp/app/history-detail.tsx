@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { Image, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Image, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type ClothingItem = {
   id: string;
@@ -8,6 +8,8 @@ type ClothingItem = {
   category: string;
   color: string;
   imageUrl?: string;
+  style?: string;
+  tpo?: string;
 };
 
 export default function HistoryDetailScreen() {
@@ -25,7 +27,6 @@ export default function HistoryDetailScreen() {
     ? JSON.parse(params.clothes)
     : [];
 
-  // ✨ 옷 카테고리 순서대로 정렬 (아우터 > 상의 > 하의 > 신발)
   clothes.sort((a, b) => {
     const order: Record<string, number> = { '아우터': 1, '상의': 2, '하의': 3, '신발': 4, '악세사리': 5, '기타': 6 };
     return (order[a.category] || 99) - (order[b.category] || 99);
@@ -33,7 +34,6 @@ export default function HistoryDetailScreen() {
 
   const feedbackTags = [params.tpo, params.tpoSuitability, params.mood].filter(Boolean);
 
-  // ✨ 날짜 포맷 변환 (2026-06-01 -> 2026. 06. 01 (요일))
   let displayDate = params.date || '-';
   if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
     const dateObj = new Date(params.date);
@@ -43,12 +43,20 @@ export default function HistoryDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: '착용 기록 상세' }} />
+      <Stack.Screen options={{ headerShown: false }} />
 
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          
+          <View style={styles.customHeaderRow}>
+            <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
+              <Ionicons name="arrow-back" size={28} color="#111827" />
+            </TouchableOpacity>
+            <Text style={styles.customHeaderTitle}>착용 기록 상세</Text>
+          </View>
+
           <View style={styles.headerArea}>
-            
             <View style={styles.dateRow}>
               <Ionicons name="calendar-clear-outline" size={26} color="#1E293B" />
               <Text style={styles.headerDate}>{displayDate}</Text>
@@ -79,39 +87,56 @@ export default function HistoryDetailScreen() {
 
             {clothes.length > 0 ? (
               clothes.map((cloth) => (
-                <View key={cloth.id} style={styles.clothCard}>
-                  {/* ✨ 1. 왼쪽에 정방형 썸네일 렌더링 */}
+                <TouchableOpacity 
+                  key={cloth.id} 
+                  style={styles.clothCard}
+                  activeOpacity={0.7}
+                  onPress={() => router.push({ pathname: '/detail', params: { id: cloth.id } })}
+                >
                   <Image 
                     source={{ uri: cloth.imageUrl || 'https://via.placeholder.com/150x150?text=No+Img' }} 
                     style={styles.clothThumbnail}
                     resizeMode="contain"
                   />
-                  
-                  {/* ✨ 2. 오른쪽에 옷 정보를 수직으로 정렬하여 배치 */}
                   <View style={styles.clothInfo}>
                     <Text style={styles.clothName} numberOfLines={1}>{cloth.name}</Text>
                     
                     <View style={styles.tagRow}>
                       <Text style={styles.tagBadge}>{cloth.category}</Text>
-                      <Text style={styles.tagBadge}>{cloth.color || '색상 미상'}</Text>
+                      
+                      {cloth.color && cloth.color !== '색상 미상' && cloth.color !== '색상 정보 없음' && (
+                        <Text style={styles.tagBadge}>{cloth.color}</Text>
+                      )}
+                      
+                      {cloth.tpo ? (
+                        <Text style={[styles.tagBadge, styles.tagBadgeTpo]}>{cloth.tpo}</Text>
+                      ) : null}
                     </View>
+
                   </View>
-                </View>
+                </TouchableOpacity>
               ))
             ) : (
               <Text style={styles.emptyText}>표시할 옷 정보가 없습니다.</Text>
             )}
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  content: { 
+    paddingHorizontal: 12,
+    paddingBottom: 40, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight! + 16 : 16 
+  },
   
+  customHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 24 },
+  customHeaderTitle: { fontSize: 26, fontWeight: '800', color: '#111827', marginBottom: 0 },
+
   headerArea: { paddingVertical: 10, marginBottom: 24, paddingHorizontal: 4 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   headerDate: { fontSize: 24, fontWeight: '700', color: '#1E293B' },
@@ -119,61 +144,52 @@ const styles = StyleSheet.create({
   headerTagChip: { backgroundColor: '#EEF2FF', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
   headerTagText: { fontSize: 13, fontWeight: '700', color: '#4F46E5' },
   
-  memoContainer: { 
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#F8FAFC', 
-    padding: 16, 
-    borderRadius: 12, 
-    gap: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3B82F6', 
-  },
+  memoContainer: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, gap: 10, borderLeftWidth: 4, borderLeftColor: '#3B82F6' },
   memoText: { fontSize: 15, color: '#334155', lineHeight: 24, flex: 1, fontWeight: '500' },
 
   emptyText: { fontSize: 14, color: '#94A3B8' },
 
   section: { marginBottom: 12 }, 
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 16, paddingHorizontal: 4 },
-  
-  // ✨ 가로형 레이아웃으로 변경된 카드 스타일
+
   clothCard: { 
-    flexDirection: 'row', // 가로 방향 배치
-    alignItems: 'center', // 세로 중앙 정렬
+    flexDirection: 'row', 
+    alignItems: 'center', 
     backgroundColor: '#FFFFFF', 
-    borderRadius: 16, 
-    padding: 16, 
-    marginBottom: 14, 
+    borderRadius: 20, 
+    padding: 22, 
+    marginBottom: 16, 
     borderWidth: 1, 
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 10, 
+    elevation: 2 
   },
+  clothThumbnail: { 
+    width: 110, 
+    height: 110, 
+    borderRadius: 16, 
+    backgroundColor: '#F8FAFC', 
+    marginRight: 20 
+  },
+  clothInfo: { flex: 1, justifyContent: 'center' },
+  clothName: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 12 },
   
-  clothThumbnail: {
-    width: 105,
-    height: 105,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    marginRight: 18, // 오른쪽 텍스트와의 간격
+  tagRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  tagBadge: { 
+    backgroundColor: '#F1F5F9', 
+    color: '#475569', 
+    fontSize: 12, 
+    fontWeight: '700', 
+    paddingVertical: 5, 
+    paddingHorizontal: 10, 
+    borderRadius: 6,
+    overflow: 'hidden'
   },
-  
-  // ✨ 우측 텍스트 정보 영역
-  clothInfo: {
-    flex: 1, // 남은 공간을 모두 차지하도록 설정
-    justifyContent: 'center',
+  tagBadgeTpo: { 
+    backgroundColor: '#EEF2FF', 
+    color: '#4F46E5' 
   },
-
-  clothName: { 
-    fontSize: 17,
-    fontWeight: '800', 
-    color: '#1E293B', 
-    marginBottom: 10
-  },
-  
-  tagRow: { flexDirection: 'row', gap: 6 },
-  tagBadge: { backgroundColor: '#F1F5F9', color: '#475569', fontSize: 13, fontWeight: '700', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
 });
