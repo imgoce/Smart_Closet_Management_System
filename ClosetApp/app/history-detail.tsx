@@ -7,7 +7,7 @@ type ClothingItem = {
   name: string;
   category: string;
   color: string;
-  imageUrl?: string; 
+  imageUrl?: string; // ✅ 이미지 경로가 있을 경우를 위해 타입 추가
 };
 
 export default function HistoryDetailScreen() {
@@ -59,15 +59,16 @@ export default function HistoryDetailScreen() {
                   <Text style={styles.clothCategory}>{cloth.category}</Text>
                   <Text style={styles.clothName}>{cloth.name}</Text>
                   
-                  {/* ✅ 옷 이름 아래에 이미지 표시 영역 추가 */}
+                  {/* ✅ Stashed changes: 옷 이름 아래에 이미지 표시 영역 유지 */}
                   <Image 
                     source={{ 
                       uri: cloth.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image' 
                     }} 
                     style={styles.clothImage}
-                    resizeMode="cover"
+                    resizeMode="contain"
                   />
 
+                  {/* ✅ Updated upstream: 최신 main의 color 노출 기능도 함께 유지 */}
                   <Text style={styles.clothColor}>색상: {cloth.color || '정보 없음'}</Text>
                 </View>
               ))
@@ -101,10 +102,10 @@ const styles = StyleSheet.create({
   /* ✅ 새로 추가된 이미지 스타일 */
   clothImage: {
     width: '100%',
-    height: 180, // 이미지가 시원하게 보이도록 높이 설정
+    height: 200, // 이미지가 시원하게 보이도록 높이 설정
     borderRadius: 8,
-    backgroundColor: '#f1f1f1',
-    marginBottom: 12, // 이미지 아래 색상 텍스트와의 간격
+    backgroundColor: '#f9f9f9',
+    marginTop: 8, // 이미지 아래 색상 텍스트와의 간격
   },
   
   clothColor: { fontSize: 13, color: '#666' },
